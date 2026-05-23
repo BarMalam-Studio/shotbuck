@@ -12,6 +12,10 @@ MAX_VIDAS=3
 vidas_jugador=$MAX_VIDAS
 vidas_dealer=$MAX_VIDAS
 
+###CONTADORES DE BALAS###
+reales_restantes=0
+seguras_restantes=0
+
 ###CONTROL CARTUCHSO###
 cargar_escopeta() {
     total_balas=$(( RANDOM % 7 + 2 )) #2-8
@@ -79,16 +83,21 @@ disparar() {
 
     if [ "$bala" == "real" ]; then #real
         echo -e "Era un cartucho ${ROJO}REAL${RESET}"
+        ((reales_restantes--))
         if [ "$objetivo" == "JUGADOR" ]; then #a ti
             ((vidas_jugador--))
         else #al otro
             ((vidas_dealer--))
         fi
+        sleep 2
         return 1 #daño = flujo de turnos normal
     else
         echo -e "Era un cartucho ${AZUL}SEGURO${RESET}"
+        ((seguras_restantes--))
+        sleep 2
         if [ "$tirador" == "$objetivo" ]; then #a ti
             echo "Conservas tu turno."
+            sleep 2
             return 0 #no daño propio = no cambia turno
         fi
         return 1 #no daño = flujo normal
