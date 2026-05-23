@@ -20,7 +20,7 @@ cargar_escopeta() {
     balas_reales=$(( RANDOM % (total_balas - 1) + 1 ))
     balas_seguras=$(( total_balas - balas_reales ))
 
-    echo -e "\n${AMARILLO}---ESCOPETA EN LA MESA---"
+    echo -e "\n${AMARILLO}---ESCOPETA EN LA MESA---${RESET}"
     echo -n "Cargando cartuchos: "
 
     #reales = rojo
@@ -37,7 +37,7 @@ cargar_escopeta() {
 
     echo "" #salto de linea para terminar la """animacion"""
 
-    echo "Reales: ${ROJO}$balas_reales ${RESET}| Falsas: ${AZUL}$balas_seguras"
+    echo -e "Reales: ${ROJO}$balas_reales${RESET} | Falsas: ${AZUL}$balas_seguras${RESET}"
     sleep 1.5
 
     cargador=()
@@ -58,7 +58,7 @@ cargar_escopeta() {
 ###ESTADO###
 mostrar_status() {
     echo -e "\n========================================"
-    echo " JUGADOR: [${VERDE}$vidas_jugador/$MAX_VIDAS Vidas${RESET}]  |  DEALER: [${VERDE}$vidas_dealer/$MAX_VIDAS Vidas${RESET}]"
+    echo -e " JUGADOR: [${VERDE}$vidas_jugador/$MAX_VIDAS Vidas${RESET}]  |  DEALER: [${VERDE}$vidas_dealer/$MAX_VIDAS Vidas${RESET}]"
     #test
     #echo " Cartuchos restantes en la recámara: ${#cargador[@]}"
     echo "========================================"
@@ -162,8 +162,8 @@ done
 # --- Fin de la partida ---
 echo -e "\n========================================"
 if [ $vidas_jugador -le 0 ]; then
-    echo "  ${ROJO}DERROTA${RESET}"
+    echo -e "  ${ROJO}DERROTA${RESET}"
 else
-    echo "  ${VERDE}VICTORIA${RESET}"
+    echo -e "  ${VERDE}VICTORIA${RESET}"
 fi
 echo -e "========================================\n"
