@@ -340,3 +340,6 @@ else
     echo -e "  ${VERDE}VICTORIA${RESET}"
 fi
 echo -e "========================================\n"
+
+sleep 3
+exit
