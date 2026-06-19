@@ -23,10 +23,10 @@ cargador=()
 ### CONFIGURACIÓN IPC Y ROLES (Handshake) ###
 if [ "$1" == "host" ]; then #en caso iniciemos la partida con el argumento host
     MI_ROL="JUGADOR 1 (Host)"
+    OPONENTE_ROL="JUGADOR 2 (Cliente)"
     ES_HOST=true #para levantar la vandera que somos host
     #manejo de los turnos
     TU_TURNO=true  #el host siempre empieza
-    ES_HOST=true
 
     #asignamos las direcciones donde se enviaran y recibiran los datos
     PIPE_OUT="/tmp/buckshot_1to2"
@@ -46,28 +46,24 @@ if [ "$1" == "host" ]; then #en caso iniciemos la partida con el argumento host
 
 elif [ "$1" == "cliente" ]; then
     MI_ROL="JUGADOR 2 (Cliente)"
+    OPONENTE_ROL="JUGADOR 1 (Host)"
+    TU_TURNO=false # El Cliente empieza esperando
+    ES_HOST=false
     PIPE_OUT="/tmp/buckshot_2to1"
     PIPE_IN="/tmp/buckshot_1to2"
 
     #mensaje
     clear
-    echo -e "${AMARILLO}Buscando partida del Host...${RESET}"
-
-    #el cliente intenta leer la tuberia, si el host no ha escrito nada, detiene el flujo
+    echo "Conectando con el Host..."
     read sync_msg < $PIPE_IN
-
-    #mensaje
-    echo -e "${VERDE}Conectado a la partida del Host exitosamente${RESET}"
-    sleep 2
-
+    echo -e "${VERDE}¡Conectado a la partida!${RESET}"
+    sleep 1.5
 else #en caso haya argumentos incorrectos
-    echo -e "${ROJO}Uso incorrecto del programa.${RESET}"
-    echo "Para crear una partida ejecuta: $0 host"
-    echo "Para unirte a una partida ejecuta: $0 cliente"
+    echo "Uso: $0 [host|cliente]"
     exit 1
 fi
 
-### LOGICA DE SINCRONIZACION ###
+### CARGAR ESCOPETA ###
 cargar_escopeta() {
     clear
     if [ "$ES_HOST" = true ]; then
@@ -102,7 +98,7 @@ cargar_escopeta() {
         echo "CARGA:$str_cargador|$str_inv_h|$str_inv_c" > $PIPE_OUT
     else
         #el cliente espera y des serializa el paquete
-        echo -e "${AMARILLO}El Host está recargando la escopeta y repartiendo objetos...${RESET}"
+        echo -e "${AMARILLO}El Host está recargando la escopeta...${RESET}"
         read sync_carga < $PIPE_IN
 
         datos=${sync_carga#CARGA:}
@@ -138,12 +134,122 @@ mostrar_status() {
     echo "================================================================="
 }
 
-### PRUEBA DE LA FASE 2 ###
-cargar_escopeta
+### BUCLE PRINCIPAL DE EVENTOS (heredado del single player) ###
+while [ $vidas_jugador -gt 0 ] && [ $vidas_oponente -gt 0 ]; do
+
+    #si se acaban las balas, el host genera más y sincroniza
+    if [ ${#cargador[@]} -eq 0 ]; then
+        cargar_escopeta
+    fi
+
+    clear
+    mostrar_status
+
+    if [ "$TU_TURNO" = true ]; then
+        echo -e "\n${VERDE}ES TU TURNO${RESET} Que quieres hacer?"
+        echo "1) Dispararle al Oponente"
+        echo "2) Dispararte a ti mismo"
+        echo -e "${AZUL}3) Usar Objeto (Bloqueado)${RESET}"
+        read -p "Selecciona una opción (1-2): " opcion
+
+        clear
+        mostrar_status
+
+        case $opcion in
+            1)
+                #extraemos la bala localmente
+                bala=${cargador[0]}
+                cargador=("${cargador[@]:1}")
+
+                #enviamos la opcion al oponente
+                echo "DISPARO:OPONENTE:$bala" > $PIPE_OUT
+
+                echo -e "\n* Apuntas a tu oponente y presionas el gatillo... *"
+                sleep 1.2
+                if [ "$bala" == "real" ]; then
+                    echo -e "Era un cartucho ${ROJO}REAL${RESET}. ¡Le diste!"
+                    ((vidas_oponente--))
+                else
+                    echo -e "*Click* Era un cartucho ${AZUL}SEGURO${RESET}."
+                fi
+                TU_TURNO=false #pasamos el turno
+                sleep 2.5
+                ;;
+            2)
+                bala=${cargador[0]}
+                cargador=("${cargador[@]:1}")
+                echo "DISPARO:YO:$bala" > $PIPE_OUT
+
+                echo -e "\n* Te apuntas a ti mismo y presionas el gatillo... *"
+                sleep 1.2
+                if [ "$bala" == "real" ]; then
+                    echo -e "Era un cartucho ${ROJO}REAL${RESET}. Pierdes una vida."
+                    ((vidas_jugador--))
+                    TU_TURNO=false
+                else
+                    echo -e "*Click* Era un cartucho ${AZUL}SEGURO${RESET}. Conservas tu turno."
+                fi
+                sleep 2.5
+                ;;
+            *)
+                echo -e "\nOpción no válida"; sleep 1.5 ;;
+        esac
+    else
+        echo -e "\n${AMARILLO}Esperando la jugada de tu oponente...${RESET}"
+
+        #esperamos que el rival escriba en su turno
+        read evento < $PIPE_IN
+
+        clear
+        mostrar_status
+
+        #PARSEAR EL MENSAJE RECIBIDO
+        accion=$(echo $evento | cut -d':' -f1)
+
+        if [ "$accion" == "DISPARO" ]; then
+            objetivo=$(echo $evento | cut -d':' -f2)
+            bala=$(echo $evento | cut -d':' -f3)
+
+            #sincronizamos nuestro cargador local sacando la bala usada
+            cargador=("${cargador[@]:1}")
+
+            #interpretar la accion desde nuestra perspectiva
+            if [ "$objetivo" == "OPONENTE" ]; then
+                #si se apunta a oponente, te dispara
+                echo -e "\n* ¡El oponente te apunta y dispara! *"
+                sleep 1.5
+                if [ "$bala" == "real" ]; then
+                    echo -e "Era un cartucho ${ROJO}REAL${RESET}. Pierdes 1 vida."
+                    ((vidas_jugador--))
+                else
+                    echo -e "Era un cartucho ${AZUL}SEGURO${RESET}. Te salvaste."
+                fi
+                TU_TURNO=true #nos devuelve el turno
+            elif [ "$objetivo" == "YO" ]; then
+                #se dispara a si mismo
+                echo -e "\n* El oponente se apunta a sí mismo y dispara... *"
+                sleep 1.5
+                if [ "$bala" == "real" ]; then
+                    echo -e "Era un cartucho ${ROJO}REAL${RESET}. El oponente pierde 1 vida."
+                    ((vidas_oponente--))
+                    TU_TURNO=true
+                else
+                    echo -e "Era un cartucho ${AZUL}SEGURO${RESET}. El oponente conserva su turno."
+                fi
+            fi
+            sleep 3
+        fi
+    fi
+done
+
+### menu modificado del single player ###
 clear
 mostrar_status
-
-echo -e "\n${VERDE}Generación de entorno exitosa. Ambos clientes comparten el mismo estado.${RESET}"
-echo "El arreglo del cargador es: ${cargador[*]}"
-
+echo -e "\n================================================================="
+if [ $vidas_jugador -le 0 ]; then
+    echo -e "                 ${ROJO}HAS MUERTO. FIN DEL JUEGO.${RESET}"
+else
+    echo -e "                 ${VERDE}¡HAS SOBREVIVIDO! VICTORIA.${RESET}"
+fi
+echo -e "=================================================================\n"
 exit 0
