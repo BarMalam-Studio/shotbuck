@@ -2,6 +2,7 @@
 
 ### COLORES ###
 ROJO='\033[0;31m'
+AZUL='\033[0;34m' #Olvide añadir el color azul
 VERDE='\033[0;32m'
 AMARILLO='\033[1;33m'
 RESET='\033[0m'
@@ -23,6 +24,10 @@ cargador=()
 if [ "$1" == "host" ]; then #en caso iniciemos la partida con el argumento host
     MI_ROL="JUGADOR 1 (Host)"
     ES_HOST=true #para levantar la vandera que somos host
+    #manejo de los turnos
+    TU_TURNO=true  #el host siempre empieza
+    ES_HOST=true
+
     #asignamos las direcciones donde se enviaran y recibiran los datos
     PIPE_OUT="/tmp/buckshot_1to2"
     PIPE_IN="/tmp/buckshot_2to1"
@@ -36,15 +41,8 @@ if [ "$1" == "host" ]; then #en caso iniciemos la partida con el argumento host
     #limpiamos pantalla
     clear
     #mensajes
-    echo -e "${AMARILLO}Iniciando servidor local...${RESET}"
-    echo -e "${AMARILLO}Esperando a que el Jugador 2 se conecte en otra terminal...${RESET}"
-
-    #detenemos el flujo hasta que se escriba algun dato en la tuberia
+    echo -e "${AMARILLO}Esperando a que el Jugador 2 se conecte...${RESET}"
     echo "INICIO" > $PIPE_OUT
-
-    #mensajes
-    echo -e "${VERDE}El Jugador 2 se ha conectado, Handshake exitoso.${RESET}"
-    sleep 2
 
 elif [ "$1" == "cliente" ]; then
     MI_ROL="JUGADOR 2 (Cliente)"
