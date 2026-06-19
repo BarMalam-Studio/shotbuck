@@ -22,6 +22,7 @@ cargador=()
 ### CONFIGURACIÓN IPC Y ROLES (Handshake) ###
 if [ "$1" == "host" ]; then #en caso iniciemos la partida con el argumento host
     MI_ROL="JUGADOR 1 (Host)"
+    ES_HOST=true #para levantar la vandera que somos host
     #asignamos las direcciones donde se enviaran y recibiran los datos
     PIPE_OUT="/tmp/buckshot_1to2"
     PIPE_IN="/tmp/buckshot_2to1"
