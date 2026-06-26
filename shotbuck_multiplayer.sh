@@ -10,6 +10,10 @@ RESET='\033[0m'
 ### LIMPIEZA DE PROCESOS (IPC) ###
 trap 'rm -f /tmp/buckshot_1to2 /tmp/buckshot_2to1; exit' INT TERM EXIT
 
+### CIFRADO (AES-256-CBC con OpenSSL) ###
+encrypt() { echo "$1" | openssl enc -aes-256-cbc -pass pass:"$PASS" -base64 -A 2>/dev/null; }
+decrypt() { echo "$1" | openssl enc -d -aes-256-cbc -pass pass:"$PASS" -base64 -A 2>/dev/null; }
+
 ### CONFIGURACIÓN IPC Y ROLES ###
 if [ "$1" == "host" ]; then
     MI_ROL="JUGADOR 1 (Host)"
@@ -23,9 +27,12 @@ if [ "$1" == "host" ]; then
     mkfifo $PIPE_OUT 2>/dev/null
     mkfifo $PIPE_IN 2>/dev/null
 
+    if [ -n "$2" ]; then PASS="$2"; else PASS=$(openssl rand -base64 12); fi
     clear
+    echo -e "${AMARILLO}--- CLAVE DE CIFRADO ---${RESET}"
+    echo -e "Comparte esta clave con el cliente: ${VERDE}$PASS${RESET}"
     echo -e "${AMARILLO}Esperando a que el Jugador 2 se conecte...${RESET}"
-    echo "INICIO" > $PIPE_OUT
+    echo "$(encrypt "INICIO")" > $PIPE_OUT
 elif [ "$1" == "cliente" ]; then
     MI_ROL="JUGADOR 2 (Cliente)"
     OPONENTE_ROL="JUGADOR 1 (Host)"
@@ -34,13 +41,15 @@ elif [ "$1" == "cliente" ]; then
     PIPE_OUT="/tmp/buckshot_2to1"
     PIPE_IN="/tmp/buckshot_1to2"
 
+    if [ -n "$2" ]; then PASS="$2"; else read -s -p "Clave de cifrado del host: " PASS; echo; fi
     clear
     echo "Conectando con el Host..."
-    read sync_msg < $PIPE_IN
+    read sync_enc < $PIPE_IN
+    sync_msg=$(decrypt "$sync_enc")
     echo -e "${VERDE}¡Conectado a la partida!${RESET}"
     sleep 1.5
 else
-    echo "Uso: $0 [host|cliente]"
+    echo "Uso: $0 [host|cliente] [clave_cifrado]"
     exit 1
 fi
 
@@ -79,10 +88,11 @@ cargar_escopeta() {
         str_cargador=$(IFS=,; echo "${cargador[*]}")
         str_inv_h=$(IFS=,; echo "${inv_jugador[*]}")
         str_inv_c=$(IFS=,; echo "${inv_oponente[*]}")
-        echo "CARGA:$str_cargador|$str_inv_h|$str_inv_c" > $PIPE_OUT
+        echo "$(encrypt "CARGA:$str_cargador|$str_inv_h|$str_inv_c")" > $PIPE_OUT
     else
         echo -e "${AMARILLO}El Host está recargando la escopeta...${RESET}"
-        read sync_carga < $PIPE_IN
+        read sync_enc < $PIPE_IN
+        sync_carga=$(decrypt "$sync_enc")
 
         datos=${sync_carga#CARGA:}
         IFS='|' read -r str_cargador str_inv_op str_inv_mi <<< "$datos"
@@ -140,7 +150,7 @@ while [ $vidas_jugador -gt 0 ] && [ $vidas_oponente -gt 0 ]; do
             1)
                 bala=${cargador[0]}
                 cargador=("${cargador[@]:1}")
-                echo "DISPARO:OPONENTE:$bala" > $PIPE_OUT
+                echo "$(encrypt "DISPARO:OPONENTE:$bala")" > $PIPE_OUT
 
                 echo -e "\n* Apuntas a tu oponente y presionas el gatillo... *"
                 sleep 1.2
@@ -156,7 +166,7 @@ while [ $vidas_jugador -gt 0 ] && [ $vidas_oponente -gt 0 ]; do
             2)
                 bala=${cargador[0]}
                 cargador=("${cargador[@]:1}")
-                echo "DISPARO:YO:$bala" > $PIPE_OUT
+                echo "$(encrypt "DISPARO:YO:$bala")" > $PIPE_OUT
 
                 echo -e "\n* Te apuntas a ti mismo y presionas el gatillo... *"
                 sleep 1.2
@@ -186,7 +196,7 @@ while [ $vidas_jugador -gt 0 ] && [ $vidas_oponente -gt 0 ]; do
                     unset 'inv_jugador[$obj_idx]'
                     inv_jugador=("${inv_jugador[@]}") # Reindexar
 
-                    echo "OBJETO:$item" > $PIPE_OUT
+                    echo "$(encrypt "OBJETO:$item")" > $PIPE_OUT
                     echo -e "\n* Usas: ${AMARILLO}$item${RESET} *"
                     sleep 1.5
 
@@ -214,8 +224,9 @@ while [ $vidas_jugador -gt 0 ] && [ $vidas_oponente -gt 0 ]; do
     else
         echo -e "\n${AMARILLO}Esperando la jugada de tu oponente...${RESET}"
 
-        # Bloqueo: Esperar mensaje del otro proceso
-        read evento < $PIPE_IN
+        # Bloqueo: Esperar mensaje cifrado del otro proceso
+        read evento_enc < $PIPE_IN
+        evento=$(decrypt "$evento_enc")
 
         clear
         mostrar_status
